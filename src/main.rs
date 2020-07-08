@@ -21,10 +21,11 @@ use anyhow::{Context, Error};
 use lazy_static::lazy_static;
 use std::collections::HashSet;
 use std::iter::Iterator;
+use std::sync::{Arc, Mutex};
 use url::form_urlencoded;
 
 use actix_web::http::HeaderMap;
-use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer};
 
 pub mod config;
 pub mod errors;
@@ -40,10 +41,11 @@ fn main() -> Result<(), Error> {
 
     let settings = config::AppSettings::assemble().context("could not assemble AppSettings")?;
     let service_addr = (settings.service.address, settings.service.port);
-    let state = config::AppState { settings };
+    let data = Arc::new(Mutex::new(settings));
     HttpServer::new(move || {
         App::new()
-            .data(web::Data::new(state.clone()))
+            .wrap(middleware::Logger::default())
+            .data(data.clone())
             .route("/action", web::get().to(action))
     })
     .bind(service_addr)
@@ -101,18 +103,13 @@ pub fn ensure_valid_bearer(headers: &HeaderMap, expected: &str) -> Result<(), er
 
 async fn action(
     req: HttpRequest,
-    app_data: web::Data<config::AppState>,
+    app_data: web::Data<Arc<Mutex<config::AppSettings>>>,
 ) -> Result<HttpResponse, errors::AppError> {
     // Throw error on invalid params
     ensure_query_params(&MANDATORY_PARAMS, req.query_string())?;
 
     // Ensure request has valid bearer token
-    let expected_token = app_data
-        .get_ref()
-        .settings
-        .service
-        .client_auth_token
-        .clone();
+    let expected_token = app_data.lock().unwrap().service.client_auth_token.clone();
     ensure_valid_bearer(req.headers(), &expected_token)?;
 
     let resp = HttpResponse::Ok()

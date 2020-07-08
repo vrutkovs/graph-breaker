@@ -191,9 +191,3 @@ impl MergeOptions<FileOptions> for AppSettings {
     Ok(())
   }
 }
-
-// This struct represents state
-#[derive(Clone)]
-pub struct AppState {
-  pub settings: AppSettings,
-}

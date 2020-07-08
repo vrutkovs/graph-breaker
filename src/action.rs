@@ -3,6 +3,8 @@
 use crate::{config, errors, github, graph_schema};
 use anyhow::Error;
 use log::debug;
+use std::path::PathBuf;
+use tempfile::tempdir;
 
 use github_rs::client::Github;
 
@@ -30,18 +32,23 @@ pub fn perform_action(
   let client =
     Github::new(settings.token.clone()).map_err(|_| errors::AppError::InvalidGithubToken())?;
 
+  let tmpdir = tempdir()?;
+  let path = tmpdir.path().to_path_buf();
+
   debug!(
-    "Cloning {}/{}",
+    "Cloning {}/{} to {}",
     settings.target_organization.clone(),
-    settings.target_repo.clone()
+    settings.target_repo.clone(),
+    path.to_str().unwrap().clone(),
   );
-  let (path_buf, repo) = github::refresh_forked_repo(
+  let repo = github::refresh_forked_repo(
     settings.fork_organization.clone(),
     settings.fork_repo.clone(),
     settings.target_organization.clone(),
     settings.target_repo.clone(),
+    &path,
   )?;
-  debug!("Cloned repo to {}", path_buf.as_path().to_str().unwrap());
+  debug!("Calculating action");
   // match action_type {
   //   ActionType::Disable => graph_schema::block_edge(version.clone())?,
   //   ActionType::Enable => graph_schema::unblock_edge(version.clone())?,
@@ -59,8 +66,6 @@ pub fn perform_action(
     settings.target_repo.clone(),
   )?;
   debug!("Created PR {}", pr_url);
-  github::destroy_repo(path_buf.as_path())?;
-  debug!("Repo destroyed");
   debug!("perform_action-");
 
   Ok(pr_url)

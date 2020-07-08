@@ -1,13 +1,13 @@
 use anyhow::Error;
 use git2::build::{CheckoutBuilder, RepoBuilder};
 use git2::{
-  Commit, Cred, FetchOptions, IndexAddOption, ObjectType, Oid, RemoteCallbacks, Repository,
-  ResetType, Signature,
+  Commit, Cred, FetchOptions, IndexAddOption, ObjectType, Oid, PushOptions, Remote,
+  RemoteCallbacks, Repository, ResetType, Signature,
 };
 use github_rs::client::Github;
-use std::fs;
-use std::path::{Path, PathBuf};
-use tempfile::tempdir;
+use log::debug;
+use std::env;
+use std::path::PathBuf;
 
 const FORK_REMOTE: &str = "origin";
 const FORK_BRANCH: &str = "master";
@@ -16,48 +16,66 @@ const UPSTREAM_BRANCH: &str = "master";
 const SIGNATURE_AUTHOR: &str = "Openshift OTA Bot";
 const SIGNATURE_EMAIL: &str = "vrutkovs@redhat.com";
 
-fn clone_repo(org: String, repo: String) -> Result<PathBuf, Error> {
+fn clone_repo(org: String, repo: String, path: &PathBuf) -> Result<Repository, Error> {
   // Authentication
   let mut builder = RepoBuilder::new();
   let mut callbacks = RemoteCallbacks::new();
   let mut fetch_options = FetchOptions::new();
 
-  callbacks.credentials(|_, _, _| {
-    let ssh_pubkey_path = dirs::home_dir().unwrap().join(".ssh").join("id_rsa.pub");
-    let ssh_secretkey_path = dirs::home_dir().unwrap().join(".ssh").join("id_rsa");
-    let credentials = Cred::ssh_key(
-      "git",
-      Some(ssh_pubkey_path.as_path()),
-      ssh_secretkey_path.as_path(),
+  callbacks.credentials(|_url, username_from_url, _allowed_types| {
+    Cred::ssh_key(
+      username_from_url.unwrap(),
+      None,
+      std::path::Path::new(&format!("{}/.ssh/id_rsa", env::var("HOME").unwrap())),
       None,
     )
-    .expect("Could not create credentials object");
-
-    Ok(credentials)
   });
 
   fetch_options.remote_callbacks(callbacks);
   builder.fetch_options(fetch_options);
 
   let url = format!("git@github.com:{}/{}.git", org, repo);
-  let tmpdir = tempdir()?;
-  builder.clone(&url, tmpdir.path())?;
-  Ok(tmpdir.path().to_owned())
+  debug!("clone_repo: cloning {}", url);
+  let repo = builder.clone(&url, &path)?;
+  debug!("clone_repo: done");
+  Ok(repo)
 }
 
-fn add_fetch_remote(git_repo: &Repository, org: String, repo: String) -> Result<(), Error> {
+fn add_fetch_remote(git_repo: &Repository, org: String, repo: String) -> Result<Remote, Error> {
+  debug!("add_fetch_remote: adding {}", UPSTREAM_REMOTE);
   let url = format!("https://github.com/{}/{}.git", org, repo);
+  debug!("add_fetch_remote: url {}", url);
+
   git_repo
-    .remote_add_fetch(UPSTREAM_REMOTE, &url)
+    .remote(UPSTREAM_REMOTE, &url)
     .map_err(|e| anyhow!(e.message().to_string()))
 }
 
-fn fetch_from_upstream(repo: &Repository) -> Result<(), Error> {
-  repo
-    .find_remote(UPSTREAM_REMOTE)?
-    .fetch(&[UPSTREAM_BRANCH], None, None)?;
+fn fetch_from_upstream(
+  repo: &Repository,
+  target_org: String,
+  target_user: String,
+) -> Result<(), Error> {
+  debug!("fetch_from_upstream+");
+  let mut remote = add_fetch_remote(&repo, target_org, target_user)?;
+
+  let mut callbacks = RemoteCallbacks::new();
+  let mut fetch_options = FetchOptions::new();
+  callbacks.credentials(|_url, username_from_url, _allowed_types| {
+    Cred::ssh_key(
+      username_from_url.unwrap(),
+      None,
+      std::path::Path::new(&format!("{}/.ssh/id_rsa", env::var("HOME").unwrap())),
+      None,
+    )
+  });
+
+  fetch_options.remote_callbacks(callbacks);
+  remote.fetch(&[UPSTREAM_BRANCH], Some(&mut fetch_options), None)?;
   let remote_refspec = format!("{}/{}", UPSTREAM_REMOTE, UPSTREAM_BRANCH);
+  debug!("fetch_from_upstream: refspec {}", remote_refspec);
   let fetch_head = repo.revparse_single(&remote_refspec)?;
+  debug!("fetch_from_upstream: fetch_head {}", fetch_head.id());
   let mut cb = CheckoutBuilder::new();
   repo
     .reset(&fetch_head, ResetType::Hard, Some(cb.force()))
@@ -76,12 +94,11 @@ pub fn refresh_forked_repo(
   target_user: String,
   forked_org: String,
   forked_user: String,
-) -> Result<(PathBuf, Repository), Error> {
-  let path = clone_repo(forked_org, forked_user)?;
-  let repo = Repository::open(path.clone())?;
-  add_fetch_remote(&repo, target_org, target_user)?;
-  fetch_from_upstream(&repo)?;
-  Ok((path.to_owned(), repo))
+  path: &PathBuf,
+) -> Result<Repository, Error> {
+  let repo = clone_repo(forked_org, forked_user, path)?;
+  fetch_from_upstream(&repo, target_org, target_user)?;
+  Ok(repo)
 }
 
 pub fn commit(repo: &Repository, message: String) -> Result<Oid, Error> {
@@ -96,7 +113,7 @@ pub fn commit(repo: &Repository, message: String) -> Result<Oid, Error> {
   // Create a new HEAD commit
   repo
     .commit(
-      Some("HEAD"),
+      Some(&FORK_BRANCH),
       &signature,
       &signature,
       &message,
@@ -112,14 +129,27 @@ pub fn create_pr(
   org: String,
   repo: String,
 ) -> Result<String, Error> {
+  let mut callbacks = RemoteCallbacks::new();
+  let mut push_options = PushOptions::new();
+
+  callbacks.credentials(|_url, username_from_url, _allowed_types| {
+    Cred::ssh_key(
+      username_from_url.unwrap(),
+      None,
+      std::path::Path::new(&format!("{}/.ssh/id_rsa", env::var("HOME").unwrap())),
+      None,
+    )
+  });
+
+  push_options.remote_callbacks(callbacks);
+
+  let push_refspec = format!("{}/{}", FORK_REMOTE, FORK_BRANCH);
+  debug!("create_pr: refspec {}", push_refspec);
+
   git_repo
     .find_remote(FORK_REMOTE)?
-    .push(&[FORK_BRANCH], None)?;
+    .push(&[FORK_BRANCH], Some(&mut push_options))?;
   // client.get().orgs().org(&org).repos().repo(&repo);
   // todo!();
   Ok("https://github.com/foo".to_string())
-}
-
-pub fn destroy_repo(path: &Path) -> Result<(), Error> {
-  fs::remove_dir_all(path).map_err(|e| anyhow!(e.to_string()))
 }

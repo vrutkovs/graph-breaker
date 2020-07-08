@@ -13,9 +13,13 @@
 // limitations under the License.
 
 #[macro_use]
+extern crate anyhow;
+#[macro_use]
 extern crate serde_derive;
 #[macro_use]
 extern crate serde_json;
+#[macro_use]
+extern crate log;
 
 use anyhow::{Context, Error};
 use lazy_static::lazy_static;
@@ -44,9 +48,14 @@ lazy_static! {
 }
 
 fn main() -> Result<(), Error> {
+    let settings = config::AppSettings::assemble().context("could not assemble AppSettings")?;
+    std::env::set_var("RUST_LOG", "actix_web=info");
+    env_logger::Builder::from_default_env()
+        .filter(Some(module_path!()), settings.verbosity)
+        .init();
+
     let sys = actix::System::new("graph-breaker");
 
-    let settings = config::AppSettings::assemble().context("could not assemble AppSettings")?;
     let service_addr = (settings.service.address, settings.service.port);
     let data = Arc::new(Mutex::new(settings));
     HttpServer::new(move || {

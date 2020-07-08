@@ -12,6 +12,10 @@ pub enum AppError {
   #[error("invalid authentication token")]
   InvalidAuthenticationToken(),
 
+  /// Invalid github token
+  #[error("invalid github token")]
+  InvalidGithubToken(),
+
   /// Invalid action
   #[error("invalid action")]
   InvalidAction(String),
@@ -38,6 +42,7 @@ impl AppError {
       AppError::MissingParams(_) => http::StatusCode::BAD_REQUEST,
       AppError::InvalidAuthenticationToken() => http::StatusCode::BAD_REQUEST,
       AppError::InvalidAction(_) => http::StatusCode::BAD_REQUEST,
+      AppError::InvalidGithubToken() => http::StatusCode::INTERNAL_SERVER_ERROR,
       AppError::ActionFailed(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
     }
   }
@@ -48,6 +53,7 @@ impl AppError {
       AppError::MissingParams(_) => "missing_params",
       AppError::InvalidAuthenticationToken() => "invalid_auth_token",
       AppError::InvalidAction(_) => "invalid_action",
+      AppError::InvalidGithubToken() => "invalid_github_token",
       AppError::ActionFailed(_) => "action_failed",
     };
     kind.to_string()

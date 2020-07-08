@@ -2,6 +2,9 @@
 
 use crate::{config, errors, github, graph_schema};
 use anyhow::Error;
+use log::debug;
+
+use github_rs::client::Github;
 
 pub enum ActionType {
   Enable,
@@ -23,22 +26,42 @@ pub fn perform_action(
   version: String,
   settings: config::GithubSettings,
 ) -> Result<String, Error> {
-  let path = github::refresh_forked_repo(
+  debug!("perform_action+");
+  let client =
+    Github::new(settings.token.clone()).map_err(|_| errors::AppError::InvalidGithubToken())?;
+
+  debug!(
+    "Cloning {}/{}",
+    settings.target_organization.clone(),
+    settings.target_repo.clone()
+  );
+  let (path_buf, repo) = github::refresh_forked_repo(
     settings.fork_organization.clone(),
     settings.fork_repo.clone(),
     settings.target_organization.clone(),
     settings.target_repo.clone(),
   )?;
-  match action_type {
-    ActionType::Disable => graph_schema::block_edge(version.clone())?,
-    ActionType::Enable => graph_schema::unblock_edge(version.clone())?,
-  };
+  debug!("Cloned repo to {}", path_buf.as_path().to_str().unwrap());
+  // match action_type {
+  //   ActionType::Disable => graph_schema::block_edge(version.clone())?,
+  //   ActionType::Enable => graph_schema::unblock_edge(version.clone())?,
+  // };
 
-  let commit_title = format!("Block edge {}", version.clone());
-  let commit_body = "2 clusters currently failing (10%), 5 gone (25%), and 13 successful (65%), out of 20 who attempted the update over 7d";
-  github::commit(path, commit_title, commit_body.to_string())?;
-  let pr_url = github::create_pr(path)?;
-  github::destroy_repo(path)?;
+  let commit_message = format!("Block edge {}
+
+  2 clusters currently failing (10%), 5 gone (25%), and 13 successful (65%), out of 20 who attempted the update over 7d", version.clone());
+  github::commit(&repo, commit_message)?;
+  debug!("Created commit");
+  let pr_url = github::create_pr(
+    &client,
+    &repo,
+    settings.target_organization.clone(),
+    settings.target_repo.clone(),
+  )?;
+  debug!("Created PR {}", pr_url);
+  github::destroy_repo(path_buf.as_path())?;
+  debug!("Repo destroyed");
+  debug!("perform_action-");
 
   Ok(pr_url)
 }

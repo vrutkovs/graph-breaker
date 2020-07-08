@@ -15,6 +15,10 @@ pub enum AppError {
   /// Invalid action
   #[error("invalid action")]
   InvalidAction(String),
+
+  /// Error performing action
+  #[error("action failed")]
+  ActionFailed(String),
 }
 
 impl AppError {
@@ -34,6 +38,7 @@ impl AppError {
       AppError::MissingParams(_) => http::StatusCode::BAD_REQUEST,
       AppError::InvalidAuthenticationToken() => http::StatusCode::BAD_REQUEST,
       AppError::InvalidAction(_) => http::StatusCode::BAD_REQUEST,
+      AppError::ActionFailed(_) => http::StatusCode::INTERNAL_SERVER_ERROR,
     }
   }
 
@@ -43,6 +48,7 @@ impl AppError {
       AppError::MissingParams(_) => "missing_params",
       AppError::InvalidAuthenticationToken() => "invalid_auth_token",
       AppError::InvalidAction(_) => "invalid_action",
+      AppError::ActionFailed(_) => "action_failed",
     };
     kind.to_string()
   }
@@ -52,7 +58,9 @@ impl AppError {
     let error_msg = format!("{}", self);
     match self {
       AppError::MissingParams(params) => format!("{}: {}", error_msg, params.join(", ")),
-      AppError::InvalidAction(action) => format!("{}: {}", error_msg, action),
+      AppError::InvalidAction(msg) | AppError::ActionFailed(msg) => {
+        format!("{}: {}", error_msg, msg)
+      }
       _ => error_msg,
     }
   }

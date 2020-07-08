@@ -30,11 +30,17 @@ use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer};
 pub mod action;
 pub mod config;
 pub mod errors;
+pub mod github;
+pub mod graph_schema;
+
+const TYPE_PARAM: &str = "type";
+const VERSION_PARAM: &str = "version";
 
 lazy_static! {
-    static ref MANDATORY_PARAMS: HashSet<String> = vec!["type".to_string(), "version".to_string()]
-        .into_iter()
-        .collect();
+    static ref MANDATORY_PARAMS: HashSet<String> =
+        vec![TYPE_PARAM.to_string(), VERSION_PARAM.to_string()]
+            .into_iter()
+            .collect();
 }
 
 fn main() -> Result<(), Error> {
@@ -104,20 +110,21 @@ async fn action(
     req: HttpRequest,
     app_data: web::Data<Arc<Mutex<config::AppSettings>>>,
 ) -> Result<HttpResponse, errors::AppError> {
+    let settings = app_data.lock().unwrap();
+
     // Throw error on invalid params
     let kv_hashmap = ensure_query_params(&MANDATORY_PARAMS, req.query_string())?;
 
     // Ensure request has valid bearer token
-    let expected_token = app_data.lock().unwrap().service.client_auth_token.clone();
+    let expected_token = settings.service.client_auth_token.clone();
     ensure_valid_bearer(req.headers(), &expected_token)?;
 
     // Validate action
-    action::ensure_valid_action(kv_hashmap.get("action").unwrap())?;
+    let action_type = action::ensure_valid_action_type(kv_hashmap.get(TYPE_PARAM).unwrap())?;
+    let version = kv_hashmap.get(VERSION_PARAM).unwrap();
 
     // Validate version
-
-    let resp = HttpResponse::Ok()
-        .content_type("application/json")
-        .body("{}");
-    Ok(resp)
+    let result = action::perform_action(action_type, version.clone(), settings.github.clone())
+        .map_err(|msg| errors::AppError::ActionFailed(msg.to_string()))?;
+    Ok(HttpResponse::from(result))
 }

@@ -19,7 +19,7 @@ extern crate serde_json;
 
 use anyhow::{Context, Error};
 use lazy_static::lazy_static;
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::iter::Iterator;
 use std::sync::{Arc, Mutex};
 use url::form_urlencoded;
@@ -27,6 +27,7 @@ use url::form_urlencoded;
 use actix_web::http::HeaderMap;
 use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer};
 
+pub mod action;
 pub mod config;
 pub mod errors;
 
@@ -61,12 +62,7 @@ fn main() -> Result<(), Error> {
 pub fn ensure_query_params(
     required_params: &HashSet<String>,
     query: &str,
-) -> Result<(), errors::AppError> {
-    // No mandatory parameters, always fine.
-    if required_params.is_empty() {
-        return Ok(());
-    }
-
+) -> Result<HashMap<String, String>, errors::AppError> {
     // Extract and de-duplicate keys from input query.
     let query_keys: HashSet<String> = form_urlencoded::parse(query.as_bytes())
         .into_owned()
@@ -80,7 +76,10 @@ pub fn ensure_query_params(
         return Err(errors::AppError::MissingParams(missing));
     }
 
-    Ok(())
+    // Return a k-v hashmap
+    Ok(form_urlencoded::parse(query.as_bytes())
+        .into_owned()
+        .collect())
 }
 
 /// Check "Authorization" header has expected token
@@ -106,11 +105,16 @@ async fn action(
     app_data: web::Data<Arc<Mutex<config::AppSettings>>>,
 ) -> Result<HttpResponse, errors::AppError> {
     // Throw error on invalid params
-    ensure_query_params(&MANDATORY_PARAMS, req.query_string())?;
+    let kv_hashmap = ensure_query_params(&MANDATORY_PARAMS, req.query_string())?;
 
     // Ensure request has valid bearer token
     let expected_token = app_data.lock().unwrap().service.client_auth_token.clone();
     ensure_valid_bearer(req.headers(), &expected_token)?;
+
+    // Validate action
+    action::ensure_valid_action(kv_hashmap.get("action").unwrap())?;
+
+    // Validate version
 
     let resp = HttpResponse::Ok()
         .content_type("application/json")

@@ -1,0 +1,11 @@
+[service]
+address = "0.0.0.0"
+port = 8080
+client_auth_token = "foo"
+
+[github]
+token = "bar"
+target_organization = "openshift"
+target_repo         = "cincinnati-graph-data"
+fork_organization   = "openshift-bot"
+fork_repo           = "cincinnati-graph-data"

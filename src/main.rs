@@ -14,7 +14,6 @@
 
 #[macro_use]
 extern crate serde_derive;
-
 #[macro_use]
 extern crate serde_json;
 
@@ -22,12 +21,12 @@ use anyhow::{Context, Error};
 use lazy_static::lazy_static;
 use std::collections::HashSet;
 use std::iter::Iterator;
-use thiserror::Error;
 use url::form_urlencoded;
 
-use actix_web::{http, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 
 pub mod config;
+pub mod errors;
 
 lazy_static! {
     static ref MANDATORY_PARAMS: HashSet<String> = vec!["type".to_string(), "version".to_string()]
@@ -35,68 +34,12 @@ lazy_static! {
         .collect();
 }
 
-// This struct represents state
-#[derive(Clone)]
-struct AppState {
-    settings: config::AppSettings,
-}
-
-#[derive(Debug, Error, Eq, PartialEq)]
-/// Application-level errors
-pub enum AppError {
-    /// Missing client parameters.
-    #[error("mandatory client parameters missing")]
-    MissingParams(Vec<String>),
-}
-
-impl AppError {
-    /// Return the HTTP JSON error response.
-    pub fn as_json_error(&self) -> HttpResponse {
-        let code = self.status_code();
-        let json_body = json!({
-            "kind": self.kind(),
-            "value": self.value(),
-        });
-        HttpResponse::build(code).json(json_body)
-    }
-
-    /// Return the HTTP status code for the error.
-    pub fn status_code(&self) -> http::StatusCode {
-        match *self {
-            AppError::MissingParams(_) => http::StatusCode::BAD_REQUEST,
-        }
-    }
-
-    /// Return the kind for the error.
-    pub fn kind(&self) -> String {
-        let kind = match *self {
-            AppError::MissingParams(_) => "missing_params",
-        };
-        kind.to_string()
-    }
-
-    /// Return the value for the error.
-    pub fn value(&self) -> String {
-        let error_msg = format!("{}", self);
-        match self {
-            AppError::MissingParams(params) => format!("{}: {}", error_msg, params.join(", ")),
-            _ => error_msg,
-        }
-    }
-}
-
-impl actix_web::error::ResponseError for AppError {
-    fn error_response(&self) -> HttpResponse {
-        self.as_json_error()
-    }
-}
-
 fn main() -> Result<(), Error> {
     let sys = actix::System::new("graph-breaker");
 
     let settings = config::AppSettings::assemble().context("could not assemble AppSettings")?;
     let service_addr = (settings.service.address, settings.service.port);
-    let state = AppState { settings };
+    let state = config::AppState { settings };
     HttpServer::new(move || {
         App::new()
             .data(web::Data::new(state.clone()))
@@ -112,7 +55,10 @@ fn main() -> Result<(), Error> {
 }
 
 /// Make sure `query` string contains all `params` keys.
-pub fn ensure_query_params(required_params: &HashSet<String>, query: &str) -> Result<(), AppError> {
+pub fn ensure_query_params(
+    required_params: &HashSet<String>,
+    query: &str,
+) -> Result<(), errors::AppError> {
     // No mandatory parameters, always fine.
     if required_params.is_empty() {
         return Ok(());
@@ -128,7 +74,7 @@ pub fn ensure_query_params(required_params: &HashSet<String>, query: &str) -> Re
     let mut missing: Vec<String> = required_params.difference(&query_keys).cloned().collect();
     if !missing.is_empty() {
         missing.sort();
-        return Err(AppError::MissingParams(missing));
+        return Err(errors::AppError::MissingParams(missing));
     }
 
     Ok(())
@@ -136,8 +82,8 @@ pub fn ensure_query_params(required_params: &HashSet<String>, query: &str) -> Re
 
 async fn action(
     req: HttpRequest,
-    _app_data: web::Data<AppState>,
-) -> Result<HttpResponse, AppError> {
+    _app_data: web::Data<config::AppState>,
+) -> Result<HttpResponse, errors::AppError> {
     ensure_query_params(&MANDATORY_PARAMS, req.query_string())?;
 
     let resp = HttpResponse::Ok()

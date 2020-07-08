@@ -7,6 +7,10 @@ pub enum AppError {
   /// Missing client parameters.
   #[error("mandatory client parameters missing")]
   MissingParams(Vec<String>),
+
+  /// Invalid authentication token
+  #[error("invalid authentication token")]
+  InvalidAuthenticationToken(),
 }
 
 impl AppError {
@@ -24,6 +28,7 @@ impl AppError {
   pub fn status_code(&self) -> http::StatusCode {
     match *self {
       AppError::MissingParams(_) => http::StatusCode::BAD_REQUEST,
+      AppError::InvalidAuthenticationToken() => http::StatusCode::BAD_REQUEST,
     }
   }
 
@@ -31,6 +36,7 @@ impl AppError {
   pub fn kind(&self) -> String {
     let kind = match *self {
       AppError::MissingParams(_) => "missing_params",
+      AppError::InvalidAuthenticationToken() => "invalid_auth_token",
     };
     kind.to_string()
   }

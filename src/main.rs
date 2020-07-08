@@ -23,6 +23,7 @@ use std::collections::HashSet;
 use std::iter::Iterator;
 use url::form_urlencoded;
 
+use actix_web::http::HeaderMap;
 use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer};
 
 pub mod config;
@@ -80,11 +81,39 @@ pub fn ensure_query_params(
     Ok(())
 }
 
+/// Check "Authorization" header has expected token
+pub fn ensure_valid_bearer(headers: &HeaderMap, expected: &str) -> Result<(), errors::AppError> {
+    let value = match headers.get(actix_web::http::header::AUTHORIZATION) {
+        Some(v) => match v.to_str() {
+            Ok(v) => v,
+            Err(_) => return Err(errors::AppError::InvalidAuthenticationToken()),
+        },
+        None => return Err(errors::AppError::InvalidAuthenticationToken()),
+    };
+
+    let actual: Vec<&str> = value.split(' ').collect();
+    if actual != vec!["Bearer", expected] {
+        return Err(errors::AppError::InvalidAuthenticationToken());
+    }
+
+    Ok(())
+}
+
 async fn action(
     req: HttpRequest,
-    _app_data: web::Data<config::AppState>,
+    app_data: web::Data<config::AppState>,
 ) -> Result<HttpResponse, errors::AppError> {
+    // Throw error on invalid params
     ensure_query_params(&MANDATORY_PARAMS, req.query_string())?;
+
+    // Ensure request has valid bearer token
+    let expected_token = app_data
+        .get_ref()
+        .settings
+        .service
+        .client_auth_token
+        .clone();
+    ensure_valid_bearer(req.headers(), &expected_token)?;
 
     let resp = HttpResponse::Ok()
         .content_type("application/json")

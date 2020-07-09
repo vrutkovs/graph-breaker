@@ -50,16 +50,16 @@ pub async fn perform_action(
     &path,
   )?;
   debug!("Calculating action");
-  // match action_type {
-  //   ActionType::Disable => graph_schema::block_edge(version.clone())?,
-  //   ActionType::Enable => graph_schema::unblock_edge(version.clone())?,
-  // };
+  match action_type {
+    ActionType::Disable => graph_schema::block_edge(&path, version.clone())?,
+    ActionType::Enable => graph_schema::unblock_edge(&path, version.clone())?,
+  };
 
-  let branch = String::from("jul-8");
+  let branch = String::from("jul-8-unblock-4.3.12");
   github::switch_to(&repo, branch.clone())?;
 
-  let pull_request_title = format!("Block edge {}", version.clone());
-  let description = "2 clusters currently failing (10%), 5 gone (25%), and 13 successful (65%), out of 20 who attempted the update over 7d";
+  let pull_request_title = format!("Unblock edge {}", version.clone());
+  let description = "6 clusters currently failing ( 8%),  8 gone (11%), and 61 successful (80%), out of 76 who attempted the update over 7d";
   let commit_message = format!("{}\n{}", pull_request_title, description);
   github::commit(&repo, branch.clone(), commit_message)?;
   github::push_to_remote(&repo, branch.clone())?;
@@ -74,7 +74,6 @@ pub async fn perform_action(
   )
   .await?;
   debug!("Created PR {}", pr_url);
-  debug!("perform_action-");
 
   Ok(pr_url)
 }

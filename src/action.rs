@@ -54,6 +54,9 @@ pub fn perform_action(
   //   ActionType::Enable => graph_schema::unblock_edge(version.clone())?,
   // };
 
+  let branch = String::from("jul-8");
+  github::switch_to(&repo, branch)?;
+
   let commit_message = format!("Block edge {}
 
   2 clusters currently failing (10%), 5 gone (25%), and 13 successful (65%), out of 20 who attempted the update over 7d", version.clone());

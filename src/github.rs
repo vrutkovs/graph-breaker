@@ -101,6 +101,17 @@ pub fn refresh_forked_repo(
   Ok(repo)
 }
 
+pub fn switch_to(repo: &Repository, branch: String) -> Result<(), Error> {
+  let commit = repo.head()?.peel_to_commit()?;
+  repo.branch(&branch, &commit, true)?;
+  let refname = format!("refs/heads/{}", &branch);
+  let obj = repo.revparse_single(&refname)?;
+  repo.checkout_tree(&obj, None)?;
+  repo
+    .set_head(&refname)
+    .map_err(|e| anyhow!(e.message().to_string()))
+}
+
 pub fn commit(repo: &Repository, message: String) -> Result<Oid, Error> {
   // Stage all files
   let mut index = repo.index()?;

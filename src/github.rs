@@ -10,7 +10,6 @@ use std::env;
 use std::path::PathBuf;
 
 const FORK_REMOTE: &str = "origin";
-const FORK_BRANCH: &str = "master";
 const UPSTREAM_REMOTE: &str = "upstream";
 const UPSTREAM_BRANCH: &str = "master";
 const SIGNATURE_AUTHOR: &str = "Openshift OTA Bot";
@@ -112,7 +111,7 @@ pub fn switch_to(repo: &Repository, branch: String) -> Result<(), Error> {
     .map_err(|e| anyhow!(e.message().to_string()))
 }
 
-pub fn commit(repo: &Repository, message: String) -> Result<Oid, Error> {
+pub fn commit(repo: &Repository, branch: String, message: String) -> Result<Oid, Error> {
   // Stage all files
   let mut index = repo.index()?;
   index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None)?;
@@ -122,9 +121,10 @@ pub fn commit(repo: &Repository, message: String) -> Result<Oid, Error> {
   let parent_commit = find_last_commit(&repo)?;
   let tree = repo.find_tree(oid)?;
   // Create a new HEAD commit
+  let refname = format!("refs/heads/{}", &branch);
   repo
     .commit(
-      Some(&FORK_BRANCH),
+      Some(&refname),
       &signature,
       &signature,
       &message,
@@ -134,12 +134,7 @@ pub fn commit(repo: &Repository, message: String) -> Result<Oid, Error> {
     .map_err(|e| anyhow!(e.message().to_string()))
 }
 
-pub fn create_pr(
-  client: &Github,
-  git_repo: &Repository,
-  org: String,
-  repo: String,
-) -> Result<String, Error> {
+pub fn push_to_remote(repo: &Repository, branch: String) -> Result<(), Error> {
   let mut callbacks = RemoteCallbacks::new();
   let mut push_options = PushOptions::new();
 
@@ -154,12 +149,26 @@ pub fn create_pr(
 
   push_options.remote_callbacks(callbacks);
 
-  let push_refspec = format!("{}/{}", FORK_REMOTE, FORK_BRANCH);
-  debug!("create_pr: refspec {}", push_refspec);
+  let push_refspec = format!("refs/heads/{}", &branch);
+  debug!(
+    "create_pr: pushing refspec {} to {}",
+    push_refspec.clone(),
+    FORK_REMOTE
+  );
 
-  git_repo
+  repo
     .find_remote(FORK_REMOTE)?
-    .push(&[FORK_BRANCH], Some(&mut push_options))?;
+    .push(&[push_refspec.clone()], Some(&mut push_options))
+    .map_err(|e| anyhow!(e.message().to_string()))
+}
+
+pub fn create_pr(
+  client: &Github,
+  git_repo: &Repository,
+  org: String,
+  repo: String,
+  branch: String,
+) -> Result<String, Error> {
   // client.get().orgs().org(&org).repos().repo(&repo);
   // todo!();
   Ok("https://github.com/foo".to_string())

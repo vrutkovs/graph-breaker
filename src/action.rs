@@ -55,18 +55,19 @@ pub fn perform_action(
   // };
 
   let branch = String::from("jul-8");
-  github::switch_to(&repo, branch)?;
+  github::switch_to(&repo, branch.clone())?;
 
   let commit_message = format!("Block edge {}
 
   2 clusters currently failing (10%), 5 gone (25%), and 13 successful (65%), out of 20 who attempted the update over 7d", version.clone());
-  github::commit(&repo, commit_message)?;
-  debug!("Created commit");
+  github::commit(&repo, branch.clone(), commit_message)?;
+  github::push_to_remote(&repo, branch.clone())?;
   let pr_url = github::create_pr(
     &client,
     &repo,
     settings.target_organization.clone(),
     settings.target_repo.clone(),
+    branch.clone(),
   )?;
   debug!("Created PR {}", pr_url);
   debug!("perform_action-");

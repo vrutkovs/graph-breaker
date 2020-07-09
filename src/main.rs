@@ -134,6 +134,7 @@ async fn action(
 
     // Validate version
     let result = action::perform_action(action_type, version.clone(), settings.github.clone())
+        .await
         .map_err(|msg| errors::AppError::ActionFailed(msg.to_string()))?;
     Ok(HttpResponse::from(result))
 }

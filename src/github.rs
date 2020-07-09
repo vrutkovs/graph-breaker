@@ -1,13 +1,15 @@
 use anyhow::Error;
+use log::debug;
+use std::env;
+use std::path::PathBuf;
+
 use git2::build::{CheckoutBuilder, RepoBuilder};
 use git2::{
   Commit, Cred, FetchOptions, IndexAddOption, ObjectType, Oid, PushOptions, Remote,
   RemoteCallbacks, Repository, ResetType, Signature,
 };
-use github_rs::client::Github;
-use log::debug;
-use std::env;
-use std::path::PathBuf;
+use hubcaps::pulls::PullOptions;
+use hubcaps::Github;
 
 const FORK_REMOTE: &str = "origin";
 const UPSTREAM_REMOTE: &str = "upstream";
@@ -162,14 +164,22 @@ pub fn push_to_remote(repo: &Repository, branch: String) -> Result<(), Error> {
     .map_err(|e| anyhow!(e.message().to_string()))
 }
 
-pub fn create_pr(
-  client: &Github,
-  git_repo: &Repository,
+pub async fn create_pr(
+  github: &Github,
   org: String,
-  repo: String,
-  branch: String,
+  repo_name: String,
+  fork_org: String,
+  fork_branch: String,
+  title: String,
+  body: String,
 ) -> Result<String, Error> {
-  // client.get().orgs().org(&org).repos().repo(&repo);
-  // todo!();
-  Ok("https://github.com/foo".to_string())
+  let repo = github.repo(org, repo_name);
+  let pr = PullOptions {
+    base: UPSTREAM_BRANCH.to_string(),
+    head: format!("{}:{}", fork_org, fork_branch),
+    title: title,
+    body: Some(body),
+  };
+  let pull = repo.pulls().create(&pr).await?;
+  Ok(pull.html_url.clone())
 }

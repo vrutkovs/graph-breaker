@@ -154,7 +154,7 @@ pub struct GithubSettings {
   pub target_repo: String,
 
   /// Fork github org/user
-  #[default("vrutkovs")]
+  #[default("openshift-bot")]
   pub fork_organization: String,
 
   /// Fork github repo

@@ -4,10 +4,6 @@ use thiserror::Error;
 #[derive(Debug, Error, Eq, PartialEq)]
 /// Application-level errors
 pub enum AppError {
-  /// Missing client parameters.
-  #[error("mandatory client parameters missing")]
-  MissingParams(Vec<String>),
-
   /// Invalid authentication token
   #[error("invalid authentication token")]
   InvalidAuthenticationToken(),
@@ -39,7 +35,6 @@ impl AppError {
   /// Return the HTTP status code for the error.
   pub fn status_code(&self) -> http::StatusCode {
     match *self {
-      AppError::MissingParams(_) => http::StatusCode::BAD_REQUEST,
       AppError::InvalidAuthenticationToken() => http::StatusCode::UNAUTHORIZED,
       AppError::InvalidAction(_) => http::StatusCode::BAD_REQUEST,
       AppError::InvalidGithubToken() => http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -50,7 +45,6 @@ impl AppError {
   /// Return the kind for the error.
   pub fn kind(&self) -> String {
     let kind = match *self {
-      AppError::MissingParams(_) => "missing_params",
       AppError::InvalidAuthenticationToken() => "invalid_auth_token",
       AppError::InvalidAction(_) => "invalid_action",
       AppError::InvalidGithubToken() => "invalid_github_token",
@@ -63,7 +57,6 @@ impl AppError {
   pub fn value(&self) -> String {
     let error_msg = format!("{}", self);
     match self {
-      AppError::MissingParams(params) => format!("{}: {}", error_msg, params.join(", ")),
       AppError::InvalidAction(msg) | AppError::ActionFailed(msg) => {
         format!("{}: {}", error_msg, msg)
       }

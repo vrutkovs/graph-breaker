@@ -12,9 +12,20 @@ use hubcaps::{Credentials, Github};
 
 const HASH_LENGTH: usize = 6;
 
+#[derive(Debug, Serialize, Deserialize)]
 pub enum ActionType {
+  #[serde(alias = "enable")]
   Enable,
+  #[serde(alias = "disable")]
   Disable,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Action {
+  r#type: ActionType,
+  version: String,
+  title: String,
+  body: String,
 }
 
 /// Check that valid action type is specified
@@ -42,13 +53,12 @@ fn generate_branch_name(title: String) -> String {
 
 /// Create a PR from specified action
 pub async fn perform_action(
-  action_type: ActionType,
-  version: String,
+  action: Action,
   settings: config::GithubSettings,
 ) -> Result<String, Error> {
   debug!("perform_action+");
   let client = Github::new(
-    "my-cool-user-agent/0.1.0",
+    "graph-breaker/0.1.0",
     Credentials::Token(settings.token.clone()),
   )?;
 
@@ -68,29 +78,35 @@ pub async fn perform_action(
     settings.fork_repo.clone(),
     &path,
   )?;
+
   debug!("Calculating action");
-  match action_type {
-    ActionType::Disable => graph_schema::block_edge(&path, version.clone())?,
-    ActionType::Enable => graph_schema::unblock_edge(&path, version.clone())?,
+  match action.r#type {
+    ActionType::Disable => graph_schema::block_edge(&path, action.version.clone())?,
+    ActionType::Enable => graph_schema::unblock_edge(&path, action.version.clone())?,
   };
 
   let branch = generate_branch_name(action.title.clone());
   debug!("Generated branch {}", branch.clone());
   github::switch_to(&repo, branch.clone())?;
 
-  let pull_request_title = format!("Unblock edge {}", version.clone());
-  let description = "6 clusters currently failing ( 8%),  8 gone (11%), and 61 successful (80%), out of 76 who attempted the update over 7d";
-  let commit_message = format!("{}\n{}", pull_request_title, description);
+  debug!(
+    "Pushing to {}/{}",
+    settings.fork_organization.clone(),
+    settings.fork_repo.clone(),
+  );
+  let commit_message = format!("{}\n{}", action.title, action.body);
   github::commit(&repo, branch.clone(), commit_message)?;
   github::push_to_remote(&repo, branch.clone())?;
+
+  debug!("Preparing pull request");
   let pr_url = github::create_pr(
     &client,
     settings.target_organization.clone(),
     settings.target_repo.clone(),
     settings.fork_organization.clone(),
     branch.clone(),
-    pull_request_title,
-    description.to_string(),
+    action.title,
+    action.body,
   )
   .await?;
   debug!("Created PR {}", pr_url);

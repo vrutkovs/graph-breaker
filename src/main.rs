@@ -22,14 +22,10 @@ extern crate log;
 extern crate serde_yaml;
 
 use anyhow::{Context, Error};
-use lazy_static::lazy_static;
-use std::collections::{HashMap, HashSet};
 use std::iter::Iterator;
-use std::sync::{Arc, Mutex};
-use url::form_urlencoded;
 
-use actix_web::http::HeaderMap;
-use actix_web::{middleware, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::http::{header::AUTHORIZATION, header::CONTENT_TYPE, HeaderMap};
+use actix_web::{guard, middleware, web, App, HttpRequest, HttpResponse, HttpServer};
 
 pub mod action;
 pub mod config;
@@ -37,19 +33,9 @@ pub mod errors;
 pub mod github;
 pub mod graph_schema;
 
-const TYPE_PARAM: &str = "type";
-const VERSION_PARAM: &str = "version";
-
-lazy_static! {
-    static ref MANDATORY_PARAMS: HashSet<String> =
-        vec![TYPE_PARAM.to_string(), VERSION_PARAM.to_string()]
-            .into_iter()
-            .collect();
-}
-
 fn main() -> Result<(), Error> {
     let settings = config::AppSettings::assemble().context("could not assemble AppSettings")?;
-    std::env::set_var("RUST_LOG", "actix_web=info");
+    std::env::set_var("RUST_LOG", "actix_web=debug");
     env_logger::Builder::from_default_env()
         .filter(Some(module_path!()), settings.verbosity)
         .init();
@@ -57,12 +43,18 @@ fn main() -> Result<(), Error> {
     let sys = actix::System::new("graph-breaker");
 
     let service_addr = (settings.service.address, settings.service.port);
-    let data = Arc::new(Mutex::new(settings));
+    let data = web::Data::new(settings);
+
     HttpServer::new(move || {
         App::new()
+            .app_data(data.clone())
             .wrap(middleware::Logger::default())
-            .data(data.clone())
-            .route("/action", web::get().to(action))
+            .data(web::JsonConfig::default().limit(4096))
+            .service(
+                web::resource("/action")
+                    .guard(guard::Header(CONTENT_TYPE.as_str(), "application/json"))
+                    .route(web::post().to(action)),
+            )
     })
     .bind(service_addr)
     .context("failed to start server")?
@@ -71,30 +63,6 @@ fn main() -> Result<(), Error> {
     let _ = sys.run();
 
     Ok(())
-}
-
-/// Make sure `query` string contains all `params` keys.
-pub fn ensure_query_params(
-    required_params: &HashSet<String>,
-    query: &str,
-) -> Result<HashMap<String, String>, errors::AppError> {
-    // Extract and de-duplicate keys from input query.
-    let query_keys: HashSet<String> = form_urlencoded::parse(query.as_bytes())
-        .into_owned()
-        .map(|(k, _)| k)
-        .collect();
-
-    // Make sure no mandatory parameters are missing.
-    let mut missing: Vec<String> = required_params.difference(&query_keys).cloned().collect();
-    if !missing.is_empty() {
-        missing.sort();
-        return Err(errors::AppError::MissingParams(missing));
-    }
-
-    // Return a k-v hashmap
-    Ok(form_urlencoded::parse(query.as_bytes())
-        .into_owned()
-        .collect())
 }
 
 /// Check "Authorization" header has expected token
@@ -117,23 +85,16 @@ pub fn ensure_valid_bearer(headers: &HeaderMap, expected: &str) -> Result<(), er
 
 async fn action(
     req: HttpRequest,
-    app_data: web::Data<Arc<Mutex<config::AppSettings>>>,
+    item: web::Json<action::Action>,
 ) -> Result<HttpResponse, errors::AppError> {
-    let settings = app_data.lock().unwrap();
-
-    // Throw error on invalid params
-    let kv_hashmap = ensure_query_params(&MANDATORY_PARAMS, req.query_string())?;
+    let settings = req.app_data::<config::AppSettings>().unwrap();
 
     // Ensure request has valid bearer token
     let expected_token = settings.service.client_auth_token.clone();
     ensure_valid_bearer(req.headers(), &expected_token)?;
 
-    // Validate action
-    let action_type = action::ensure_valid_action_type(kv_hashmap.get(TYPE_PARAM).unwrap())?;
-    let version = kv_hashmap.get(VERSION_PARAM).unwrap();
-
-    // Validate version
-    let result = action::perform_action(action_type, version.clone(), settings.github.clone())
+    // Perform action
+    let result = action::perform_action(item.into_inner(), settings.github.clone())
         .await
         .map_err(|msg| errors::AppError::ActionFailed(msg.to_string()))?;
     Ok(HttpResponse::from(result))

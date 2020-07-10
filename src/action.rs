@@ -1,6 +1,6 @@
 //! Available service actions
 
-use crate::{config, errors, github, graph_schema};
+use crate::{config, github, graph_schema};
 
 use anyhow::Error;
 use log::debug;
@@ -26,15 +26,6 @@ pub struct Action {
   version: String,
   title: String,
   body: String,
-}
-
-/// Check that valid action type is specified
-pub fn ensure_valid_action_type(value: &str) -> Result<ActionType, errors::AppError> {
-  match value {
-    "enable" => return Ok(ActionType::Enable),
-    "disable" => return Ok(ActionType::Disable),
-    a => return Err(errors::AppError::InvalidAction(a.to_string())),
-  }
 }
 
 /// Generate a new branch name

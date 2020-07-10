@@ -1,0 +1,6 @@
+{
+  "type": "disable",
+  "version": "4.3.13",
+  "title": "Block edge 4.3.13",
+  "body": "2 clusters currently failing (17%),  6 gone (50%), and  4 successful (33%), out of 12 who attempted the update over 7d"
+}

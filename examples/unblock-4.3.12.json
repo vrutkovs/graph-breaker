@@ -1,0 +1,6 @@
+{
+  "type": "enable",
+  "version": "4.3.12",
+  "title": "Unblock edge 4.3.12",
+  "body": "6 clusters currently failing ( 8%),  8 gone (11%), and 61 successful (80%), out of 76 who attempted the update over 7d"
+}

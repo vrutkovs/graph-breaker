@@ -16,12 +16,8 @@ const UPSTREAM_BRANCH: &str = "master";
 const SIGNATURE_AUTHOR: &str = "Openshift OTA Bot";
 const SIGNATURE_EMAIL: &str = "vrutkovs@redhat.com";
 
-fn clone_repo(org: String, repo: String, path: &PathBuf) -> Result<Repository, Error> {
-  // Authentication
-  let mut builder = RepoBuilder::new();
+fn get_ssh_auth_callbacks<'cb>() -> RemoteCallbacks<'cb> {
   let mut callbacks = RemoteCallbacks::new();
-  let mut fetch_options = FetchOptions::new();
-
   callbacks.credentials(|_url, username_from_url, _allowed_types| {
     Cred::ssh_key(
       username_from_url.unwrap(),
@@ -30,8 +26,14 @@ fn clone_repo(org: String, repo: String, path: &PathBuf) -> Result<Repository, E
       None,
     )
   });
+  callbacks
+}
 
-  fetch_options.remote_callbacks(callbacks);
+fn clone_repo(org: String, repo: String, path: &PathBuf) -> Result<Repository, Error> {
+  // Authentication
+  let mut builder = RepoBuilder::new();
+  let mut fetch_options = FetchOptions::new();
+  fetch_options.remote_callbacks(get_ssh_auth_callbacks());
   builder.fetch_options(fetch_options);
 
   let url = format!("git@github.com:{}/{}.git", org, repo);
@@ -45,7 +47,6 @@ fn add_fetch_remote(git_repo: &Repository, org: String, repo: String) -> Result<
   debug!("add_fetch_remote: adding {}", UPSTREAM_REMOTE);
   let url = format!("https://github.com/{}/{}.git", org, repo);
   debug!("add_fetch_remote: url {}", url);
-
   git_repo.remote(UPSTREAM_REMOTE, &url)
 }
 
@@ -56,19 +57,8 @@ fn fetch_from_upstream(
 ) -> Result<(), Error> {
   debug!("fetch_from_upstream+");
   let mut remote = add_fetch_remote(&repo, target_org, target_user)?;
-
-  let mut callbacks = RemoteCallbacks::new();
   let mut fetch_options = FetchOptions::new();
-  callbacks.credentials(|_url, username_from_url, _allowed_types| {
-    Cred::ssh_key(
-      username_from_url.unwrap(),
-      None,
-      std::path::Path::new(&format!("{}/.ssh/id_rsa", env::var("HOME").unwrap())),
-      None,
-    )
-  });
-
-  fetch_options.remote_callbacks(callbacks);
+  fetch_options.remote_callbacks(get_ssh_auth_callbacks());
   remote.fetch(&[UPSTREAM_BRANCH], Some(&mut fetch_options), None)?;
   let remote_refspec = format!("{}/{}", UPSTREAM_REMOTE, UPSTREAM_BRANCH);
   debug!("fetch_from_upstream: refspec {}", remote_refspec);
@@ -78,11 +68,11 @@ fn fetch_from_upstream(
   repo.reset(&fetch_head, ResetType::Hard, Some(cb.force()))
 }
 
-fn find_last_commit(repo: &Repository) -> Result<Commit, git2::Error> {
+fn find_last_commit(repo: &Repository) -> Result<Commit, Error> {
   let obj = repo.head()?.resolve()?.peel(ObjectType::Commit)?;
   obj
     .into_commit()
-    .map_err(|_| git2::Error::from_str("Couldn't find commit"))
+    .map_err(|_| Error::from_str("Couldn't find commit"))
 }
 
 pub fn refresh_forked_repo(
@@ -128,19 +118,8 @@ pub fn commit(repo: &Repository, branch: String, message: String) -> Result<Oid,
 }
 
 pub fn push_to_remote(repo: &Repository, branch: String) -> Result<(), Error> {
-  let mut callbacks = RemoteCallbacks::new();
   let mut push_options = PushOptions::new();
-
-  callbacks.credentials(|_url, username_from_url, _allowed_types| {
-    Cred::ssh_key(
-      username_from_url.unwrap(),
-      None,
-      std::path::Path::new(&format!("{}/.ssh/id_rsa", env::var("HOME").unwrap())),
-      None,
-    )
-  });
-
-  push_options.remote_callbacks(callbacks);
+  push_options.remote_callbacks(get_ssh_auth_callbacks());
 
   let push_refspec = format!("refs/heads/{}", &branch);
   debug!(

@@ -22,10 +22,12 @@ extern crate log;
 extern crate serde_yaml;
 
 use anyhow::{Context, Error};
-use std::iter::Iterator;
 
-use actix_web::http::{header::AUTHORIZATION, header::CONTENT_TYPE, HeaderMap};
-use actix_web::{guard, middleware, web, App, HttpRequest, HttpResponse, HttpServer};
+use actix_web::dev::ServiceRequest;
+use actix_web::http::header::CONTENT_TYPE;
+use actix_web::{guard, middleware, web, App, HttpResponse, HttpServer};
+use actix_web_httpauth::extractors::bearer::BearerAuth;
+use actix_web_httpauth::middleware::HttpAuthentication;
 
 pub mod action;
 pub mod config;
@@ -46,9 +48,11 @@ fn main() -> Result<(), Error> {
     let data = web::Data::new(settings);
 
     HttpServer::new(move || {
+        let auth = HttpAuthentication::bearer(bearer_validator);
         App::new()
             .app_data(data.clone())
             .wrap(middleware::Logger::default())
+            .wrap(auth)
             .data(web::JsonConfig::default().limit(4096))
             .service(
                 web::resource("/action")
@@ -66,32 +70,22 @@ fn main() -> Result<(), Error> {
 }
 
 /// Check "Authorization" header has expected token
-pub fn ensure_valid_bearer(headers: &HeaderMap, expected: &str) -> Result<(), errors::AppError> {
-    let value = match headers.get(actix_web::http::header::AUTHORIZATION) {
-        Some(v) => match v.to_str() {
-            Ok(v) => v,
-            Err(_) => return Err(errors::AppError::InvalidAuthenticationToken()),
-        },
-        None => return Err(errors::AppError::InvalidAuthenticationToken()),
-    };
-
-    let actual: Vec<&str> = value.split(' ').collect();
-    if actual != vec!["Bearer", expected] {
-        return Err(errors::AppError::InvalidAuthenticationToken());
+async fn bearer_validator(
+    req: ServiceRequest,
+    _credentials: BearerAuth,
+) -> Result<ServiceRequest, actix_web::Error> {
+    let settings = req.app_data::<config::AppSettings>().unwrap();
+    if _credentials.token() == settings.service.client_auth_token {
+        Ok(req)
+    } else {
+        Err(errors::AppError::InvalidAuthenticationToken().into())
     }
-
-    Ok(())
 }
 
 async fn action(
     settings: web::Data<config::AppSettings>,
-    req: HttpRequest,
     item: web::Json<action::Action>,
 ) -> Result<HttpResponse, errors::AppError> {
-    // Ensure request has valid bearer token
-    let expected_token = settings.service.client_auth_token.clone();
-    ensure_valid_bearer(req.headers(), &expected_token)?;
-
     // Perform action
     let result = action::perform_action(item.into_inner(), settings.github.clone())
         .await

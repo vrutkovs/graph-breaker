@@ -1,11 +1,10 @@
-use anyhow::Error;
 use log::debug;
 use std::env;
 use std::path::PathBuf;
 
 use git2::build::{CheckoutBuilder, RepoBuilder};
 use git2::{
-  Commit, Cred, FetchOptions, IndexAddOption, ObjectType, Oid, PushOptions, Remote,
+  Commit, Cred, Error, FetchOptions, IndexAddOption, ObjectType, Oid, PushOptions, Remote,
   RemoteCallbacks, Repository, ResetType, Signature,
 };
 use hubcaps::pulls::PullOptions;
@@ -47,9 +46,7 @@ fn add_fetch_remote(git_repo: &Repository, org: String, repo: String) -> Result<
   let url = format!("https://github.com/{}/{}.git", org, repo);
   debug!("add_fetch_remote: url {}", url);
 
-  git_repo
-    .remote(UPSTREAM_REMOTE, &url)
-    .map_err(|e| anyhow!(e.message().to_string()))
+  git_repo.remote(UPSTREAM_REMOTE, &url)
 }
 
 fn fetch_from_upstream(
@@ -78,9 +75,7 @@ fn fetch_from_upstream(
   let fetch_head = repo.revparse_single(&remote_refspec)?;
   debug!("fetch_from_upstream: fetch_head {}", fetch_head.id());
   let mut cb = CheckoutBuilder::new();
-  repo
-    .reset(&fetch_head, ResetType::Hard, Some(cb.force()))
-    .map_err(|e| anyhow!(e.message().to_string()))
+  repo.reset(&fetch_head, ResetType::Hard, Some(cb.force()))
 }
 
 fn find_last_commit(repo: &Repository) -> Result<Commit, git2::Error> {
@@ -108,9 +103,7 @@ pub fn switch_to(repo: &Repository, branch: String) -> Result<(), Error> {
   let refname = format!("refs/heads/{}", &branch);
   let obj = repo.revparse_single(&refname)?;
   repo.checkout_tree(&obj, None)?;
-  repo
-    .set_head(&refname)
-    .map_err(|e| anyhow!(e.message().to_string()))
+  repo.set_head(&refname)
 }
 
 pub fn commit(repo: &Repository, branch: String, message: String) -> Result<Oid, Error> {
@@ -124,16 +117,14 @@ pub fn commit(repo: &Repository, branch: String, message: String) -> Result<Oid,
   let tree = repo.find_tree(oid)?;
   // Create a new HEAD commit
   let refname = format!("refs/heads/{}", &branch);
-  repo
-    .commit(
-      Some(&refname),
-      &signature,
-      &signature,
-      &message,
-      &tree,
-      &[&parent_commit],
-    )
-    .map_err(|e| anyhow!(e.message().to_string()))
+  repo.commit(
+    Some(&refname),
+    &signature,
+    &signature,
+    &message,
+    &tree,
+    &[&parent_commit],
+  )
 }
 
 pub fn push_to_remote(repo: &Repository, branch: String) -> Result<(), Error> {
@@ -161,7 +152,6 @@ pub fn push_to_remote(repo: &Repository, branch: String) -> Result<(), Error> {
   repo
     .find_remote(FORK_REMOTE)?
     .push(&[push_refspec.clone()], Some(&mut push_options))
-    .map_err(|e| anyhow!(e.message().to_string()))
 }
 
 pub async fn create_pr(
@@ -172,7 +162,7 @@ pub async fn create_pr(
   fork_branch: String,
   title: String,
   body: String,
-) -> Result<String, Error> {
+) -> Result<String, hubcaps::Error> {
   let repo = github.repo(org, repo_name);
   let pr = PullOptions {
     base: UPSTREAM_BRANCH.to_string(),
@@ -181,5 +171,6 @@ pub async fn create_pr(
     body: Some(body),
   };
   let pull = repo.pulls().create(&pr).await?;
+
   Ok(pull.html_url.clone())
 }

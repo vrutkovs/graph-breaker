@@ -1,11 +1,16 @@
 //! Available service actions
 
 use crate::{config, errors, github, graph_schema};
+
 use anyhow::Error;
 use log::debug;
+use rand::distributions::Alphanumeric;
+use rand::{thread_rng, Rng};
 use tempfile::tempdir;
 
 use hubcaps::{Credentials, Github};
+
+const HASH_LENGTH: usize = 6;
 
 pub enum ActionType {
   Enable,
@@ -19,6 +24,20 @@ pub fn ensure_valid_action_type(value: &str) -> Result<ActionType, errors::AppEr
     "disable" => return Ok(ActionType::Disable),
     a => return Err(errors::AppError::InvalidAction(a.to_string())),
   }
+}
+
+/// Generate a new branch name
+fn generate_branch_name(title: String) -> String {
+  let rand_string: String = thread_rng()
+    .sample_iter(&Alphanumeric)
+    .take(HASH_LENGTH)
+    .collect();
+
+  let ascii_title = title
+    .to_lowercase()
+    .replace(|c: char| !c.is_ascii(), "")
+    .replace(|c: char| c == ' ', "-");
+  format!("{}-{}", ascii_title, rand_string)
 }
 
 /// Create a PR from specified action
@@ -55,7 +74,8 @@ pub async fn perform_action(
     ActionType::Enable => graph_schema::unblock_edge(&path, version.clone())?,
   };
 
-  let branch = String::from("jul-8-unblock-4.3.12");
+  let branch = generate_branch_name(action.title.clone());
+  debug!("Generated branch {}", branch.clone());
   github::switch_to(&repo, branch.clone())?;
 
   let pull_request_title = format!("Unblock edge {}", version.clone());

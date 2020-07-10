@@ -84,11 +84,10 @@ pub fn ensure_valid_bearer(headers: &HeaderMap, expected: &str) -> Result<(), er
 }
 
 async fn action(
+    settings: web::Data<config::AppSettings>,
     req: HttpRequest,
     item: web::Json<action::Action>,
 ) -> Result<HttpResponse, errors::AppError> {
-    let settings = req.app_data::<config::AppSettings>().unwrap();
-
     // Ensure request has valid bearer token
     let expected_token = settings.service.client_auth_token.clone();
     ensure_valid_bearer(req.headers(), &expected_token)?;

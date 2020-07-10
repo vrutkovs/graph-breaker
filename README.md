@@ -16,10 +16,10 @@ fork process.
 
 * Run the service via `cargo build --release && ./target/release/graph-breaker -c path/to/your/config.toml -vv`
 
-* `curl -X POST -H 'Authorization: Bearer foo' -H "Content-Type: application/json" -d @examples/unblock-4.3.12.json -kLvs http://localhost:8080/action\?type\=enable\&version\=4.3.12`
+* `curl -X POST -H 'Authorization: Bearer foo' -H "Content-Type: application/json" -d @examples/unblock-4.3.12.json -kLvs http://localhost:8080/action`
   This will make the service create a new pull request to target repo, which removes 4.3.12 block.
 
-* `curl -X POST -H 'Authorization: Bearer foo' -H "Content-Type: application/json" -d @examples/block-4.3.13.json -kLvs http://localhost:8080/action\?type\=disable\&version\=4.3.13`
+* `curl -X POST -H 'Authorization: Bearer foo' -H "Content-Type: application/json" -d @examples/block-4.3.13.json -kLvs http://localhost:8080/action`
   This will make the service create a pull request which blocks upgrades to 4.3.13 version
 
 Branch name, pull request title and body are so far hardcoded

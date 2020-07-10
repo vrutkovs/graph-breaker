@@ -40,7 +40,7 @@ impl AppError {
   pub fn status_code(&self) -> http::StatusCode {
     match *self {
       AppError::MissingParams(_) => http::StatusCode::BAD_REQUEST,
-      AppError::InvalidAuthenticationToken() => http::StatusCode::BAD_REQUEST,
+      AppError::InvalidAuthenticationToken() => http::StatusCode::UNAUTHORIZED,
       AppError::InvalidAction(_) => http::StatusCode::BAD_REQUEST,
       AppError::InvalidGithubToken() => http::StatusCode::INTERNAL_SERVER_ERROR,
       AppError::ActionFailed(_) => http::StatusCode::INTERNAL_SERVER_ERROR,

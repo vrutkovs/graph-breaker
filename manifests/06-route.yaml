@@ -1,0 +1,18 @@
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: graph-breaker
+  namespace: graph-breaker
+spec:
+  host: graph-breaker.vrutkovs.eu
+  subdomain: ''
+  to:
+    kind: Service
+    name: graph-breaker
+    weight: 100
+  port:
+    targetPort: 8080
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
+  wildcardPolicy: None

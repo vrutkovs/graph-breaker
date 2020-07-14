@@ -4,7 +4,6 @@ metadata:
   labels:
     app: graph-breaker
   name: graph-breaker-src
-  namespace: graph-breaker
 spec:
   failedBuildsHistoryLimit: 5
   nodeSelector: null

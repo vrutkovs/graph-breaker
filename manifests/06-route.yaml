@@ -2,7 +2,6 @@ kind: Route
 apiVersion: route.openshift.io/v1
 metadata:
   name: graph-breaker
-  namespace: graph-breaker
 spec:
   host: graph-breaker.vrutkovs.eu
   subdomain: ''

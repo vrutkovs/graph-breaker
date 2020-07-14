@@ -9,7 +9,6 @@ metadata:
   labels:
     app: graph-breaker
   name: graph-breaker
-  namespace: graph-breaker
 spec:
   replicas: 1
   selector:

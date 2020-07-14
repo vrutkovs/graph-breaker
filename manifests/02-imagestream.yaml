@@ -2,7 +2,6 @@ apiVersion: image.openshift.io/v1
 kind: ImageStream
 metadata:
   name: graph-breaker
-  namespace: graph-breaker
   labels:
     app: graph-breaker
 spec:

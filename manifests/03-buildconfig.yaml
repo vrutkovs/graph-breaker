@@ -3,7 +3,7 @@ kind: BuildConfig
 metadata:
   labels:
     app: graph-breaker
-  name: graph-breaker-src
+  name: graph-breaker
 spec:
   failedBuildsHistoryLimit: 5
   nodeSelector: null

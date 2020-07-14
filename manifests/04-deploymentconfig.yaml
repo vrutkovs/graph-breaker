@@ -31,7 +31,10 @@ spec:
         deploymentconfig: graph-breaker
     spec:
       containers:
-        - image: ''
+        - args:
+            - '-c'
+            - /etc/graph-breaker/config.toml
+          image: ' '
           imagePullPolicy: Always
           name: graph-breaker
           ports:
@@ -40,12 +43,30 @@ spec:
           resources: {}
           terminationMessagePath: /dev/termination-log
           terminationMessagePolicy: File
+          volumeMounts:
+            - mountPath: /root/.ssh
+              name: volume-ssh-key
+              readOnly: true
+            - mountPath: /etc/graph-breaker
+              name: volume-app-config
       dnsPolicy: ClusterFirst
       restartPolicy: Always
       schedulerName: default-scheduler
       serviceAccountName: graph-breaker-robot
       securityContext: {}
       terminationGracePeriodSeconds: 30
+      volumes:
+        - name: volume-ssh-key
+          secret:
+            defaultMode: 400
+            items:
+              - key: ssh-private-key
+                path: id_rsa
+            secretName: ssh-config
+        - configMap:
+            defaultMode: 420
+            name: app-config
+          name: volume-app-config
   test: false
   triggers:
     - imageChangeParams:

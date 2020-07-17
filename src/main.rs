@@ -35,7 +35,8 @@ pub mod errors;
 pub mod github;
 pub mod graph_schema;
 
-fn main() -> Result<(), Error> {
+#[actix_rt::main]
+async fn main() -> Result<(), Error> {
     let settings = config::AppSettings::assemble().context("could not assemble AppSettings")?;
     std::env::set_var("RUST_LOG", "actix_web=debug");
     env_logger::Builder::from_default_env()
@@ -91,4 +92,76 @@ async fn action(
         .await
         .map_err(|msg| errors::AppError::ActionFailed(msg.to_string()))?;
     Ok(HttpResponse::from(result))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use actix_service::Service;
+    use actix_web::http::header::AUTHORIZATION;
+    use actix_web::{http, test};
+
+    macro_rules! mock_app {
+        ($settings:expr) => {
+            test::init_service(
+                App::new()
+                    .app_data(web::Data::new($settings))
+                    .wrap(HttpAuthentication::bearer(bearer_validator))
+                    .service(
+                        web::resource("/test")
+                            .guard(guard::Header(CONTENT_TYPE.as_str(), "application/json"))
+                            .to(|| async { HttpResponse::Ok() }),
+                    ),
+            )
+            .await
+        };
+    }
+
+    #[actix_rt::test]
+    async fn test_missing_bearer_auth() {
+        let mut settings = config::AppSettings::default();
+        settings.service.client_auth_token = "foo".to_string();
+        let mut app = mock_app!(settings);
+
+        let req = test::TestRequest::with_uri("/test").to_request();
+        let resp = app.call(req).await;
+        assert!(resp.is_err());
+        assert_eq!(
+            resp.unwrap_err().as_response_error().status_code(),
+            http::StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[actix_rt::test]
+    async fn test_invalid_bearer_auth() {
+        let mut settings = config::AppSettings::default();
+        settings.service.client_auth_token = "foo".to_string();
+        let mut app = mock_app!(settings);
+
+        let req = test::TestRequest::with_uri("/test")
+            .header(AUTHORIZATION, "Bearer: bar")
+            .to_request();
+        let resp = app.call(req).await;
+        assert!(resp.is_err());
+        assert_eq!(
+            resp.unwrap_err().as_response_error().status_code(),
+            http::StatusCode::UNAUTHORIZED
+        );
+    }
+
+    #[actix_rt::test]
+    async fn test_ok_bearer_auth() {
+        let mut settings = config::AppSettings::default();
+        settings.service.client_auth_token = "foo".to_string();
+        let mut app = mock_app!(settings);
+        let req = test::TestRequest::with_uri("/test")
+            .header(AUTHORIZATION, "Bearer: foo")
+            .to_request();
+        let resp = app.call(req).await;
+        assert!(resp.is_err());
+        assert_eq!(
+            resp.unwrap_err().as_response_error().status_code(),
+            http::StatusCode::UNAUTHORIZED
+        );
+    }
 }

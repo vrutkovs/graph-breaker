@@ -56,14 +56,17 @@ fn fetch_from_upstream(
   target_user: String,
 ) -> Result<(), Error> {
   debug!("fetch_from_upstream+");
-  let mut remote = add_fetch_remote(&repo, target_org, target_user)?;
   let mut fetch_options = FetchOptions::new();
   fetch_options.remote_callbacks(get_ssh_auth_callbacks());
+
+  let mut remote = add_fetch_remote(&repo, target_org, target_user)?;
   remote.fetch(&[UPSTREAM_BRANCH], Some(&mut fetch_options), None)?;
+
   let remote_refspec = format!("{}/{}", UPSTREAM_REMOTE, UPSTREAM_BRANCH);
   debug!("fetch_from_upstream: refspec {}", remote_refspec);
   let fetch_head = repo.revparse_single(&remote_refspec)?;
   debug!("fetch_from_upstream: fetch_head {}", fetch_head.id());
+
   let mut cb = CheckoutBuilder::new();
   repo.reset(&fetch_head, ResetType::Hard, Some(cb.force()))
 }

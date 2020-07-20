@@ -103,6 +103,10 @@ pub fn commit(repo: &Repository, branch: String, message: String) -> Result<Oid,
   // Stage all files
   let mut index = repo.index()?;
   index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None)?;
+  // Check that commit is not empty
+  if index.len() == 0 {
+    return Err(git2::Error::from_str("empty commit detected"));
+  }
   let oid = index.write_tree()?;
   // Prepare commit metadata
   let signature = Signature::now(SIGNATURE_AUTHOR, SIGNATURE_EMAIL)?;

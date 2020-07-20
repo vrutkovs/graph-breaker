@@ -21,7 +21,7 @@ extern crate serde_json;
 extern crate log;
 extern crate serde_yaml;
 
-use anyhow::{Context, Error};
+use anyhow::Context;
 
 use actix_web::dev::ServiceRequest;
 use actix_web::http::header::CONTENT_TYPE;
@@ -36,14 +36,14 @@ pub mod github;
 pub mod graph_schema;
 
 #[actix_rt::main]
-async fn main() -> Result<(), Error> {
-    let settings = config::AppSettings::assemble().context("could not assemble AppSettings")?;
+async fn main() -> std::io::Result<()> {
+    let settings = config::AppSettings::assemble()
+        .context("could not assemble AppSettings")
+        .unwrap();
     std::env::set_var("RUST_LOG", "actix_web=debug");
     env_logger::Builder::from_default_env()
         .filter(Some(module_path!()), settings.verbosity)
         .init();
-
-    let sys = actix::System::new("graph-breaker");
 
     let service_addr = (settings.service.address, settings.service.port);
     let data = web::Data::new(settings);
@@ -61,13 +61,9 @@ async fn main() -> Result<(), Error> {
                     .route(web::post().to(action)),
             )
     })
-    .bind(service_addr)
-    .context("failed to start server")?
-    .run();
-
-    let _ = sys.run();
-
-    Ok(())
+    .bind(service_addr)?
+    .run()
+    .await
 }
 
 /// Check "Authorization" header has expected token

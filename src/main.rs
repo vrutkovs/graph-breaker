@@ -28,6 +28,7 @@ use actix_web::http::header::CONTENT_TYPE;
 use actix_web::{guard, middleware, web, App, HttpResponse, HttpServer};
 use actix_web_httpauth::extractors::bearer::BearerAuth;
 use actix_web_httpauth::middleware::HttpAuthentication;
+use actix_web_prom::PrometheusMetrics;
 
 pub mod action;
 pub mod config;
@@ -47,11 +48,13 @@ async fn main() -> std::io::Result<()> {
 
     let service_addr = (settings.service.address, settings.service.port);
     let data = web::Data::new(settings);
+    let prometheus = PrometheusMetrics::new("graph_breaker", Some("/metrics"), None);
 
     HttpServer::new(move || {
         let auth = HttpAuthentication::bearer(bearer_validator);
         App::new()
             .app_data(data.clone())
+            .wrap(prometheus.clone())
             .wrap(middleware::Logger::default())
             .data(web::JsonConfig::default().limit(4096))
             .service(web::resource("/healthz").to(health))

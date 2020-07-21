@@ -53,11 +53,11 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(data.clone())
             .wrap(middleware::Logger::default())
-            .wrap(auth)
             .data(web::JsonConfig::default().limit(4096))
-            .service(web::resource("/health").to(health))
+            .service(web::resource("/healthz").to(health))
             .service(
                 web::resource("/action")
+                    .wrap(auth)
                     .guard(guard::Header(CONTENT_TYPE.as_str(), "application/json"))
                     .route(web::post().to(action)),
             )

@@ -55,6 +55,7 @@ async fn main() -> std::io::Result<()> {
             .wrap(middleware::Logger::default())
             .wrap(auth)
             .data(web::JsonConfig::default().limit(4096))
+            .service(web::resource("/health").to(health))
             .service(
                 web::resource("/action")
                     .guard(guard::Header(CONTENT_TYPE.as_str(), "application/json"))
@@ -64,6 +65,11 @@ async fn main() -> std::io::Result<()> {
     .bind(service_addr)?
     .run()
     .await
+}
+
+/// Health endpoint
+fn health() -> HttpResponse {
+    HttpResponse::Ok().finish()
 }
 
 /// Check "Authorization" header has expected token

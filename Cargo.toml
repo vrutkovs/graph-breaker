@@ -28,6 +28,10 @@ rand = "^0.7.3"
 actix-web-httpauth = "^0.4.2"
 actix-rt = "^1.0"
 actix-web-prom = "^0.2"
+futures = "0.3"
 
 [dev-dependencies]
 actix-service = "1.0.5"
+
+[patch.crates-io]
+hubcaps = { git = "https://github.com/vrutkovs/hubcaps", branch="pulls-list-fix" }

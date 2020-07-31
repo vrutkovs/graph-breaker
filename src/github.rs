@@ -1,3 +1,4 @@
+use futures::prelude::*;
 use log::debug;
 use std::env;
 use std::path::PathBuf;
@@ -7,6 +8,8 @@ use git2::{
   Commit, Cred, Error, FetchOptions, IndexAddOption, ObjectType, Oid, PushOptions, Remote,
   RemoteCallbacks, Repository, ResetType, Signature,
 };
+use hubcaps::comments::CommentOptions;
+use hubcaps::labels::{Label, LabelOptions};
 use hubcaps::pulls::PullOptions;
 use hubcaps::Github;
 
@@ -15,6 +18,8 @@ const UPSTREAM_REMOTE: &str = "upstream";
 const UPSTREAM_BRANCH: &str = "master";
 const SIGNATURE_AUTHOR: &str = "Openshift OTA Bot";
 const SIGNATURE_EMAIL: &str = "vrutkovs@redhat.com";
+const VERSION_LABEL_COLOR: &str = "0e8a16";
+const ACTION_LABEL_COLOR: &str = "0052cc";
 
 fn get_ssh_auth_callbacks<'cb>() -> RemoteCallbacks<'cb> {
   let mut callbacks = RemoteCallbacks::new();
@@ -103,7 +108,7 @@ pub fn commit(repo: &Repository, branch: String, message: String) -> Result<Oid,
   // Stage all files
   let mut index = repo.index()?;
   index.add_all(["*"].iter(), IndexAddOption::DEFAULT, None)?;
-  // Check that commit is not empty
+  // No files included - skip
   if index.len() == 0 {
     return Err(git2::Error::from_str("empty commit detected"));
   }
@@ -142,12 +147,14 @@ pub fn push_to_remote(repo: &Repository, branch: String) -> Result<(), Error> {
 
 pub async fn create_pr(
   github: &Github,
-  org: String,
-  repo_name: String,
+  org: &str,
+  repo_name: &str,
   fork_org: String,
   fork_branch: String,
   title: String,
   body: String,
+  version: &str,
+  action: &str,
 ) -> Result<String, hubcaps::Error> {
   let repo = github.repo(org, repo_name);
   let pr = PullOptions {
@@ -157,6 +164,106 @@ pub async fn create_pr(
     body: Some(body),
   };
   let pull = repo.pulls().create(&pr).await?;
-
+  // Add version label
+  let _ = get_or_create_label(github, org, repo_name, version, VERSION_LABEL_COLOR).await?;
+  // Add action label
+  let _ = get_or_create_label(github, org, repo_name, action, ACTION_LABEL_COLOR).await?;
+  let pull_request = repo.pulls().get(pull.number);
+  pull_request.labels().set(vec![version, action]).await?;
   Ok(pull.html_url.clone())
+}
+
+pub async fn get_or_create_label(
+  github: &Github,
+  org: &str,
+  repo_name: &str,
+  label_name: &str,
+  color: &str,
+) -> Result<Label, hubcaps::Error> {
+  let repo = github.repo(org, repo_name);
+  let mut lbl_stream = repo.labels().iter();
+  while let Some(item) = lbl_stream.next().await {
+    if item.is_err() {
+      continue;
+    }
+    let lbl = item.unwrap();
+    if lbl.name == label_name {
+      return Ok(lbl);
+    }
+  }
+
+  let lbl_opts = LabelOptions {
+    name: label_name.to_string(),
+    color: color.to_string(),
+    description: label_name.to_string(),
+  };
+  repo.labels().create(&lbl_opts).await
+}
+
+pub async fn has_open_pr_for(
+  github: &Github,
+  org: String,
+  repo_name: String,
+  version: String,
+) -> Result<Option<u64>, hubcaps::Error> {
+  let repo = github.repo(org, repo_name);
+  let pulls = repo.pulls();
+  let mut pr_stream = pulls.iter(&Default::default());
+  while let Some(item) = pr_stream.next().await {
+    if item.is_err() {
+      continue;
+    }
+    let pr = item.unwrap();
+    if pr.labels.iter().find(|l| l.name == version).is_some()
+      && pr.base.commit_ref == UPSTREAM_BRANCH
+    {
+      return Ok(Some(pr.number));
+    }
+  }
+  Ok(None)
+}
+
+pub async fn comment_pr(
+  github: &Github,
+  org: String,
+  repo_name: String,
+  id: u64,
+  comment: String,
+) -> Result<String, hubcaps::Error> {
+  let repo = github.repo(org, repo_name);
+  let pr = repo.pulls().get(id);
+  let comment_opts = CommentOptions { body: comment };
+  let _ = pr.comments().create(&comment_opts).await;
+  Ok(pr.get().await?.html_url.clone())
+}
+
+pub async fn get_pr_action(
+  github: &Github,
+  org: String,
+  repo_name: String,
+  id: u64,
+) -> Result<String, hubcaps::Error> {
+  let repo = github.repo(org, repo_name);
+  let pr = repo.pulls().get(id);
+  Ok(
+    pr.get()
+      .await?
+      .labels
+      .iter()
+      .find(|l| l.color == ACTION_LABEL_COLOR)
+      .map(|l| l.name.clone())
+      .unwrap(),
+  )
+}
+
+pub async fn close_pr(
+  github: &Github,
+  org: String,
+  repo_name: String,
+  id: u64,
+) -> Result<String, hubcaps::Error> {
+  let repo = github.repo(org, repo_name);
+  let pr = repo.pulls().get(id);
+  let _ = pr.close().await;
+  Ok(pr.get().await?.html_url.clone())
 }

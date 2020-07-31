@@ -13,7 +13,7 @@ use hubcaps::{Credentials, Github};
 
 const HASH_LENGTH: usize = 6;
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, std::cmp::PartialEq)]
 pub enum ActionType {
   #[serde(alias = "enable")]
   Enable,
@@ -53,6 +53,65 @@ pub async fn perform_action(
     "graph-breaker/0.1.0",
     Credentials::Token(settings.token.clone()),
   )?;
+
+  debug!("Looking for similar pull requests");
+  let maybe_pr_id = github::has_open_pr_for(
+    &client,
+    settings.target_organization.clone(),
+    settings.target_repo.clone(),
+    action.version.clone(),
+  )
+  .await?;
+  if maybe_pr_id.is_some() {
+    let pr_id = maybe_pr_id.unwrap();
+    debug!("Updating existing PR ID {:?}", pr_id);
+    let pr_url = github::comment_pr(
+      &client,
+      settings.target_organization.clone(),
+      settings.target_repo.clone(),
+      pr_id,
+      action.body,
+    )
+    .await?;
+    // Close the pr if actions don't match
+    let pr_action = github::get_pr_action(
+      &client,
+      settings.target_organization.clone(),
+      settings.target_repo.clone(),
+      pr_id,
+    )
+    .await?;
+    let pr_action_type: Result<ActionType, serde_json::Error> =
+      serde_json::from_value(serde_json::Value::String(pr_action));
+    match pr_action_type {
+      Err(_) => {
+        // No action found in the original PR
+        return github::close_pr(
+          &client,
+          settings.target_organization.clone(),
+          settings.target_repo.clone(),
+          pr_id,
+        )
+        .await
+        .map_err(|e| anyhow!("Couldn't close PR: {}", e));
+      }
+      Ok(action_type) => {
+        // Close PR if actions don't match
+        if action_type != action.r#type {
+          return github::close_pr(
+            &client,
+            settings.target_organization.clone(),
+            settings.target_repo.clone(),
+            pr_id,
+          )
+          .await
+          .map_err(|e| anyhow!("Couldn't close PR: {}", e));
+        } else {
+          return Ok(pr_url);
+        }
+      }
+    }
+  }
 
   let tmpdir = tempdir().context("Failed to create tempdir")?;
   let path = tmpdir.path().to_path_buf();
@@ -94,19 +153,22 @@ pub async fn perform_action(
   github::commit(&repo, branch.clone(), commit_message).context("Failed to commit changes")?;
   github::push_to_remote(&repo, branch.clone()).context("Failed to push to remote")?;
 
-  debug!("Preparing pull request");
-  let pr_url = github::create_pr(
+  debug!("Creating new PR");
+  let action_str_json =
+    serde_json::to_string(&action.r#type).context("Failed to serialize action type")?;
+  // json serialization adds quotes around the valud
+  let action_str = action_str_json.trim_matches('"');
+  github::create_pr(
     &client,
-    settings.target_organization.clone(),
-    settings.target_repo.clone(),
+    settings.target_organization.as_str(),
+    settings.target_repo.as_str(),
     settings.fork_organization.clone(),
     branch.clone(),
     action.title,
     action.body,
+    action.version.as_str(),
+    &action_str,
   )
   .await
-  .context("Failed to create PR")?;
-  debug!("Created PR {}", pr_url);
-
-  Ok(pr_url)
+  .map_err(|e| anyhow!("Couldn't create PR: {}", e))
 }

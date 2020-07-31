@@ -938,6 +938,7 @@ dependencies = [
  "anyhow",
  "dirs",
  "env_logger",
+ "futures",
  "git2",
  "hubcaps",
  "lazy_static",
@@ -1042,8 +1043,7 @@ checksum = "cd179ae861f0c2e53da70d892f5f3029f9594be0c41dc5269cd371691b1dc2f9"
 [[package]]
 name = "hubcaps"
 version = "0.6.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b4b14ceb0d5b0e8949edd62b5cf4e050fe26b2ffce71f7c2898854ef13d6ef3e"
+source = "git+https://github.com/vrutkovs/hubcaps?branch=pulls-list-fix#f19997f07dc6e70c9efa1db9dcde48f0c3db7da5"
 dependencies = [
  "base64 0.12.3",
  "data-encoding",

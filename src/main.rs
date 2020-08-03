@@ -33,6 +33,7 @@ use actix_web_prom::PrometheusMetrics;
 pub mod action;
 pub mod config;
 pub mod errors;
+pub mod git_repo;
 pub mod github;
 pub mod graph_schema;
 

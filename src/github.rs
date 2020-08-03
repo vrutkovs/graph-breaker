@@ -5,7 +5,7 @@ use hubcaps::comments::CommentOptions;
 use hubcaps::labels::{Label, LabelOptions};
 use hubcaps::pulls::PullOptions;
 use hubcaps::repositories::Repository;
-use hubcaps::Github;
+use hubcaps::{Credentials, Github};
 
 const VERSION_LABEL_COLOR: &str = "0e8a16";
 const ACTION_LABEL_COLOR: &str = "0052cc";
@@ -15,7 +15,8 @@ pub struct GithubRepo {
 }
 
 impl GithubRepo {
-  pub fn new(client: &Github, org_name: &str, repo_name: &str) -> Self {
+  pub fn new(token: String, org_name: &str, repo_name: &str) -> Self {
+    let client = Github::new("graph-breaker/0.1.0", Credentials::Token(token)).unwrap();
     let repo = client.repo(org_name, repo_name);
     GithubRepo { repo: repo }
   }

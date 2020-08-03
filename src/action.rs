@@ -9,8 +9,6 @@ use rand::distributions::Alphanumeric;
 use rand::{thread_rng, Rng};
 use tempfile::tempdir;
 
-use hubcaps::{Credentials, Github};
-
 const HASH_LENGTH: usize = 6;
 
 #[derive(Debug, Serialize, Deserialize, std::cmp::PartialEq)]
@@ -66,13 +64,9 @@ pub async fn perform_action(
   settings: config::GithubSettings,
 ) -> Result<String, Error> {
   debug!("perform_action+");
-  let client = Github::new(
-    "graph-breaker/0.1.0",
-    Credentials::Token(settings.token.clone()),
-  )?;
 
   let mut github_repo = github::GithubRepo::new(
-    &client,
+    settings.token,
     settings.target_organization.as_str(),
     settings.target_repo.as_str(),
   );

@@ -63,7 +63,7 @@ pub async fn perform_action(
   action: Action,
   settings: config::GithubSettings,
 ) -> Result<String, Error> {
-  debug!("perform_action+");
+  debug!("Performing action {:?}", action);
 
   let mut github_repo = github::GithubRepo::new(
     settings.token,
@@ -108,22 +108,18 @@ pub async fn perform_action(
   let tmpdir = tempdir().context("Failed to create tempdir")?;
   let path = tmpdir.path().to_path_buf();
 
-  debug!(
-    "Cloning {}/{} to {}",
-    settings.fork_organization.clone(),
-    settings.fork_repo.clone(),
-    path
-      .to_str()
-      .context("Failed to convert path to string")?
-      .clone(),
-  );
-  let repo = git_repo::refresh_forked_repo(
-    settings.target_organization.clone(),
-    settings.target_repo.clone(),
-    settings.fork_organization.clone(),
-    settings.fork_repo.clone(),
+  let mut gitrepo = git_repo::GitRepo::new(
+    settings.fork_organization.as_str(),
+    settings.fork_repo.as_str(),
     &path,
-  )?;
+  )
+  .context("Failed to clone the repo")?;
+  gitrepo
+    .fetch_from_upstream(
+      settings.fork_organization.as_str(),
+      settings.fork_repo.as_str(),
+    )
+    .context("Failed to fetch repo upstream")?;
 
   debug!("Calculating action");
   match action.r#type {
@@ -134,7 +130,9 @@ pub async fn perform_action(
 
   let branch = generate_branch_name(action.title.clone());
   debug!("Generated branch {}", branch.clone());
-  git_repo::switch_to(&repo, &branch.to_string()).context("Failed to switch to branch")?;
+  gitrepo
+    .switch_to(&branch.to_string())
+    .context("Failed to switch to branch")?;
 
   debug!(
     "Pushing to {}/{}",
@@ -142,8 +140,12 @@ pub async fn perform_action(
     settings.fork_repo.clone(),
   );
   let commit_message = format!("{}\n{}", action.title, action.body);
-  git_repo::commit(&repo, &branch, commit_message).context("Failed to commit changes")?;
-  git_repo::push_to_remote(&repo, &branch).context("Failed to push to remote")?;
+  gitrepo
+    .commit(&branch, commit_message)
+    .context("Failed to commit changes")?;
+  gitrepo
+    .push_to_remote(&branch)
+    .context("Failed to push to remote")?;
 
   debug!("Creating new PR");
   github_repo

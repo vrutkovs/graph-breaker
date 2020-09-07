@@ -14,8 +14,10 @@ const HASH_LENGTH: usize = 6;
 #[derive(Debug, Serialize, Deserialize, std::cmp::PartialEq)]
 pub enum ActionType {
   #[serde(alias = "enable")]
+  #[serde(alias = "Unblock")]
   Enable,
   #[serde(alias = "disable")]
+  #[serde(alias = "Block")]
   Disable,
 }
 
@@ -28,19 +30,9 @@ pub struct Action {
 }
 
 impl Action {
-  /// Return necessary data for PR - title, body, version label, action label
-  pub fn to_pr_tuple(&self) -> (&str, &str, &str, String) {
-    let action_str_json = serde_json::to_string(&self.r#type)
-      .context("Failed to serialize action type")
-      .unwrap();
-    // json serialization adds quotes around the value
-    let action_str = action_str_json.trim_matches('"');
-    return (
-      self.title.as_str(),
-      self.body.as_str(),
-      self.version.as_str(),
-      action_str.to_string(),
-    );
+  /// Return necessary data for PR - title, body
+  pub fn to_pr_tuple(&self) -> (&str, &str) {
+    return (self.title.as_str(), self.body.as_str());
   }
 }
 
@@ -80,7 +72,7 @@ pub async fn perform_action(
       .comment_in_pr(pr_id, action.body.as_str())
       .await?;
     // Close the pr if actions don't match
-    let pr_action = github_repo.get_action_from_pr_labels(pr_id).await?;
+    let pr_action = github_repo.get_action_from_pr_title(pr_id).await?;
     let pr_action_type: Result<ActionType, serde_json::Error> =
       serde_json::from_value(serde_json::Value::String(pr_action));
     match pr_action_type {

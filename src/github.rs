@@ -2,13 +2,9 @@ use crate::{action, git_repo};
 
 use futures::prelude::*;
 use hubcaps::comments::CommentOptions;
-use hubcaps::labels::{Label, LabelOptions};
 use hubcaps::pulls::PullOptions;
 use hubcaps::repositories::Repository;
 use hubcaps::{Credentials, Github};
-
-const VERSION_LABEL_COLOR: &str = "0e8a16";
-const ACTION_LABEL_COLOR: &str = "0052cc";
 
 pub struct GithubRepo {
   repo: Repository,
@@ -21,37 +17,13 @@ impl GithubRepo {
     GithubRepo { repo: repo }
   }
 
-  async fn get_or_create_label(
-    &mut self,
-    name: &str,
-    color: &str,
-  ) -> Result<Label, hubcaps::Error> {
-    let mut lbl_stream = self.repo.labels().iter();
-    while let Some(item) = lbl_stream.next().await {
-      if item.is_err() {
-        continue;
-      }
-      let lbl = item.unwrap();
-      if lbl.name == name {
-        return Ok(lbl);
-      }
-    }
-
-    let lbl_opts = LabelOptions {
-      name: name.to_string(),
-      color: color.to_string(),
-      description: name.to_string(),
-    };
-    self.repo.labels().create(&lbl_opts).await
-  }
-
   pub async fn create_pr(
     &mut self,
     fork_org: &str,
     fork_branch: &str,
     action: action::Action,
   ) -> Result<String, hubcaps::Error> {
-    let (title, body, version_label, action_label) = action.to_pr_tuple();
+    let (title, body) = action.to_pr_tuple();
 
     let pr = PullOptions {
       base: git_repo::UPSTREAM_BRANCH.to_string(),
@@ -60,19 +32,6 @@ impl GithubRepo {
       body: Some(body.to_string()),
     };
     let pull = self.repo.pulls().create(&pr).await?;
-    // Add version label
-    let _ = self
-      .get_or_create_label(version_label, VERSION_LABEL_COLOR)
-      .await?;
-    // Add action label
-    let _ = self
-      .get_or_create_label(action_label.as_str(), ACTION_LABEL_COLOR)
-      .await?;
-    let pull_request = self.repo.pulls().get(pull.number);
-    pull_request
-      .labels()
-      .set(vec![version_label, action_label.as_str()])
-      .await?;
     Ok(pull.html_url.clone())
   }
 
@@ -83,9 +42,16 @@ impl GithubRepo {
         continue;
       }
       let pr = item.unwrap();
-      if pr.labels.iter().find(|l| l.name == version).is_some()
-        && pr.base.commit_ref == git_repo::UPSTREAM_BRANCH
-      {
+      // Check base branch
+      if pr.base.commit_ref != git_repo::UPSTREAM_BRANCH {
+        continue;
+      }
+      let title_iter = pr.title.split_whitespace();
+      // Title has to be in format of "Block version x.y.z"
+      if title_iter.size_hint().0 != 3 {
+        continue;
+      }
+      if title_iter.last() == Some(version) {
         return Ok(Some(pr.number));
       }
     }
@@ -101,16 +67,16 @@ impl GithubRepo {
     Ok(pr.get().await?.html_url.clone())
   }
 
-  pub async fn get_action_from_pr_labels(&mut self, id: u64) -> Result<String, hubcaps::Error> {
+  pub async fn get_action_from_pr_title(&mut self, id: u64) -> Result<String, hubcaps::Error> {
     let pr = self.repo.pulls().get(id);
     Ok(
       pr.get()
         .await?
-        .labels
-        .iter()
-        .find(|l| l.color == ACTION_LABEL_COLOR)
-        .map(|l| l.name.clone())
-        .unwrap(),
+        .title
+        .split_whitespace()
+        .next()
+        .unwrap()
+        .to_string(),
     )
   }
 

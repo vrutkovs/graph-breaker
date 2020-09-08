@@ -6,10 +6,10 @@ RUN dnf update -y && \
 
 WORKDIR /code
 COPY . .
-RUN cargo build --release
+RUN cargo install --path .
 
 FROM registry.access.redhat.com/ubi8/ubi
 
-COPY --from=builder /code/target/release/graph-breaker /usr/local/bin/graph-breaker
+COPY --from=builder /root/.cargo/bin/graph-breaker /usr/local/bin/graph-breaker
 
 ENTRYPOINT ["/usr/local/bin/graph-breaker"]

@@ -56,7 +56,7 @@ async fn main() -> std::io::Result<()> {
         App::new()
             .app_data(data.clone())
             .wrap(prometheus.clone())
-            .wrap(middleware::Logger::default())
+            .wrap(middleware::Logger::default().exclude("/healthz"))
             .data(web::JsonConfig::default().limit(4096))
             .service(web::resource("/healthz").to(health))
             .service(

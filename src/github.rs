@@ -47,10 +47,6 @@ impl GithubRepo {
         continue;
       }
       let title_iter = pr.title.split_whitespace();
-      // Title has to be in format of "Block version x.y.z"
-      if title_iter.size_hint().0 != 3 {
-        continue;
-      }
       if title_iter.last() == Some(version) {
         return Ok(Some(pr.number));
       }

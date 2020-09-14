@@ -63,7 +63,6 @@ pub async fn perform_action(
     settings.target_repo.as_str(),
   );
 
-  debug!("Looking for similar pull requests");
   let maybe_pr_id = github_repo.has_open_pr_for(action.version.as_str()).await?;
   if maybe_pr_id.is_some() {
     let pr_id = maybe_pr_id.unwrap();

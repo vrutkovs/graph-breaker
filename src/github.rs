@@ -1,6 +1,8 @@
 use crate::{action, git_repo};
 
 use futures::prelude::*;
+use log::debug;
+
 use hubcaps::comments::CommentOptions;
 use hubcaps::pulls::PullOptions;
 use hubcaps::repositories::Repository;
@@ -36,18 +38,23 @@ impl GithubRepo {
   }
 
   pub async fn has_open_pr_for(&mut self, version: &str) -> Result<Option<u64>, hubcaps::Error> {
+    debug!("Looking for similar pull requests");
     let mut pr_stream = self.repo.pulls().iter(&Default::default());
     while let Some(item) = pr_stream.next().await {
       if item.is_err() {
         continue;
       }
       let pr = item.unwrap();
+      debug!("Checking #{}: {}", pr.number, pr.title);
       // Check base branch
       if pr.base.commit_ref != git_repo::UPSTREAM_BRANCH {
+        debug!("Wrong commit_ref: {}", pr.base.commit_ref);
         continue;
       }
+      // Check PR title
       let title_iter = pr.title.split_whitespace();
       if title_iter.last() == Some(version) {
+        debug!("Found matching PR");
         return Ok(Some(pr.number));
       }
     }

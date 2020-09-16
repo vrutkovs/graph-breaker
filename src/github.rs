@@ -42,6 +42,7 @@ impl GithubRepo {
     let mut pr_stream = self.repo.pulls().iter(&Default::default());
     while let Some(item) = pr_stream.next().await {
       if item.is_err() {
+        debug!("Error fetching item: {:?}", item.unwrap_err());
         continue;
       }
       let pr = item.unwrap();
@@ -54,10 +55,11 @@ impl GithubRepo {
       // Check PR title
       let title_iter = pr.title.split_whitespace();
       if title_iter.last() == Some(version) {
-        debug!("Found matching PR");
+        debug!("Found matching PR: {}", pr.number);
         return Ok(Some(pr.number));
       }
     }
+    debug!("No matching PRs found");
     Ok(None)
   }
 

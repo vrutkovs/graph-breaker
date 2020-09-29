@@ -34,4 +34,4 @@ futures = "0.3"
 actix-service = "1.0.5"
 
 [patch.crates-io]
-hubcaps = { git = "https://github.com/vrutkovs/hubcaps", branch="pulls-list-fix" }
+hubcaps = { git = "https://github.com/vrutkovs/hubcaps", rev="713bc40997f9086a07b7cc67fe6d0f94f769f88a" }

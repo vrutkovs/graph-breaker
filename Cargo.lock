@@ -1042,8 +1042,8 @@ checksum = "cd179ae861f0c2e53da70d892f5f3029f9594be0c41dc5269cd371691b1dc2f9"
 
 [[package]]
 name = "hubcaps"
-version = "0.6.1"
-source = "git+https://github.com/vrutkovs/hubcaps?branch=pulls-list-fix#66e74b89024e73c98507dfdbe0a09c976c1e4ab3"
+version = "0.6.2"
+source = "git+https://github.com/vrutkovs/hubcaps?rev=713bc40997f9086a07b7cc67fe6d0f94f769f88a#713bc40997f9086a07b7cc67fe6d0f94f769f88a"
 dependencies = [
  "base64 0.12.3",
  "data-encoding",

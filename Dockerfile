@@ -1,15 +1,17 @@
-FROM registry.fedoraproject.org/fedora:32 as builder
+FROM registry.access.redhat.com/devtools/rust-toolset-rhel7:1.43.1 as builder
 
-RUN dnf update -y && \
-    dnf install rust cargo openssl-devel -y && \
-    dnf clean all
-
-WORKDIR /code
+WORKDIR /opt/app-root/src/
 COPY . .
-RUN cargo install --path .
+RUN bash -c "source /opt/app-root/etc/scl_enable && cargo build --release"
 
-FROM registry.access.redhat.com/ubi8/ubi
+FROM centos:7
 
-COPY --from=builder /root/.cargo/bin/graph-breaker /usr/local/bin/graph-breaker
+ENV RUST_LOG=actix_web=error,dkregistry=error
+
+RUN yum update -y && \
+    yum install -y openssl && \
+    yum clean all
+
+COPY --from=builder /opt/app-root/src/target/release/graph-breaker /usr/local/bin/graph-breaker
 
 ENTRYPOINT ["/usr/local/bin/graph-breaker"]
